@@ -1,0 +1,43 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:  # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_PROD_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_PROD_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Configure Databricks CLI
+        run: |
+          mkdir -p ~/.databricks
+          cat <<EOF > ~/.databricks/config
+          [DEFAULT]
+          host = $DATABRICKS_HOST
+          token = $DATABRICKS_TOKEN
+          EOF
+
+      - name: Create /Workspace/Production folder if not exists
+        run: |
+          databricks workspace mkdirs /Workspace/Production
+
+      - name: Upload all .ipynb notebooks from /notebooks
+        run: |
+          for file in notebooks/*.ipynb; do
+            filename=$(basename "$file")
+            workspace_path="/Workspace/Production/$filename"
+            echo "Uploading $file to $workspace_path"
+            databricks workspace import "$file" "$workspace_path" --language PYTHON --format JUPYTER --overwrite
+          done
+
+      - name: List uploaded notebooks (for verification)
+        run: databricks workspace list /Workspace/Production
